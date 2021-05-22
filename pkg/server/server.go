@@ -17,12 +17,18 @@ const timeout = 15 * time.Second
 
 var QT quotes.Quotes
 
+type ErrMess struct {
+	ErrCode int    `json:"ErrorCode"`
+	ErrMess string `json:"ErrorMessage"`
+}
+
 func Run() {
 	QT = *quotes.NewQuotes()
 	QT.AddQuotes("cat1", "text 1", "kizildur")
 	QT.AddQuotes("cat1", "text 2", "dazdranagor")
 	QT.AddQuotes("cat2", "text 3", "boris_britva")
 	QT.AddQuotes("cat3", "text 4", "kizildur")
+	QT.AddQuotes("cat3", "Если тебя где-то не ждут в рванных носках,то и в целых туда идтить не нужно", "Д.Стетхем")
 	handler := http.NewServeMux()
 	handler.HandleFunc("/quotes", HandleGetAllQuotes)                     //GET
 	handler.HandleFunc("/quotes/category/", HandleGetAllQuotesByCategory) //GET
@@ -40,14 +46,14 @@ func Run() {
 
 	log.Printf("Listening on http://%s\n", s.Addr)
 
-	go func() {
+	/*go func() {
 		log.Printf("Start scedule")
 		for {
 			time.Sleep(10 * time.Second)
 			QT.DeleteQuoteByTime(10)
 
 		}
-	}()
+	}()*/
 
 	err := s.ListenAndServe()
 	if err != nil {
@@ -92,15 +98,12 @@ func HandleAddQuotes(w http.ResponseWriter, r *http.Request) {
 		quote := quotes.Quote{}
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("ERR", err)))
+			ErrHandler(w, err, http.StatusInternalServerError)
 			return
 		}
 		err = json.Unmarshal(body, &quote)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("ERR", err)))
-			return
+			ErrHandler(w, err, http.StatusInternalServerError)
 		}
 		id := QT.AddQuotes(quote.Category, quote.Quote, quote.Author)
 		w.WriteHeader(http.StatusOK)
@@ -119,29 +122,24 @@ func HandleUpdateQuotes(w http.ResponseWriter, r *http.Request) {
 			s := strings.Split(r.URL.Path, "/")
 			if len(s) == 4 {
 				id, err := strconv.ParseInt(s[3], 10, 64)
-				fmt.Println(id)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(fmt.Sprintf("ERR", err)))
+					ErrHandler(w, err, http.StatusInternalServerError)
 					return
 				}
 				quote := quotes.Quote{}
 				body, err := ioutil.ReadAll(r.Body)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(fmt.Sprintf("ERR", err)))
+					ErrHandler(w, err, http.StatusInternalServerError)
 					return
 				}
 				err = json.Unmarshal(body, &quote)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(fmt.Sprintf("ERR", err)))
+					ErrHandler(w, err, http.StatusInternalServerError)
 					return
 				}
 				err = QT.UpdateQuotes(id, quote.Category, quote.Quote, quote.Author)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(fmt.Sprintf("ERR", err)))
+					ErrHandler(w, err, http.StatusInternalServerError)
 					return
 				}
 				w.WriteHeader(http.StatusOK)
@@ -162,16 +160,13 @@ func HandleDeleteQuotes(w http.ResponseWriter, r *http.Request) {
 			s := strings.Split(r.URL.Path, "/")
 			if len(s) == 4 {
 				id, err := strconv.ParseInt(s[3], 10, 64)
-				fmt.Println(id)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(fmt.Sprintf("ERR", err)))
+					ErrHandler(w, err, http.StatusInternalServerError)
 					return
 				}
 				err = QT.DeleteQuote(id)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(fmt.Sprintf("ERR", err)))
+					ErrHandler(w, err, http.StatusInternalServerError)
 					return
 				}
 				w.WriteHeader(http.StatusOK)
@@ -182,6 +177,17 @@ func HandleDeleteQuotes(w http.ResponseWriter, r *http.Request) {
 	} else {
 		HandleMethodIsNotAllowed(w, r)
 	}
+}
+
+func ErrHandler(w http.ResponseWriter, err error, statusCode int) {
+	er := ErrMess{
+		ErrCode: statusCode,
+		ErrMess: "Error:" + err.Error(),
+	}
+	q, _ := json.Marshal(er)
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte(q))
+	return
 }
 
 func HandleMethodIsNotAllowed(w http.ResponseWriter, r *http.Request) {
